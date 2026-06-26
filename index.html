@@ -104,7 +104,26 @@
             color: var(--color-text);
         }
 
-        /* continuously rotate the logo mark in 3D */
+        /* holds the WebGL canvas + the flat SVG fallback */
+        .logo-mark-wrap {
+            position: relative;
+            width: 50px;
+            height: 50px;
+            display: inline-block;
+        }
+
+        #logo-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: none; /* revealed once the 3D logo initialises */
+        }
+
+        .logo-mark-wrap.is-3d #logo-canvas { display: block; }
+        .logo-mark-wrap.is-3d .logo-mark { display: none; }
+
+        /* flat fallback spin (only seen if WebGL is unavailable) */
         .logo-mark {
             transform-style: preserve-3d;
             transform-origin: center;
@@ -113,10 +132,6 @@
 
         @keyframes logo-spin {
             to { transform: rotateY(360deg); }
-        }
-
-        .logo:hover .logo-mark {
-            animation-duration: 2.8s; /* whirls up on hover */
         }
 
         .nav-links {
@@ -894,6 +909,11 @@
                 height: 40px;
             }
 
+            .logo-mark-wrap {
+                width: 40px;
+                height: 40px;
+            }
+
             .nav-links {
                 gap: 1.5rem;
             }
@@ -1232,6 +1252,8 @@
 <body>
     <nav>
         <div class="logo">
+            <span class="logo-mark-wrap">
+            <canvas id="logo-canvas" aria-hidden="true"></canvas>
             <svg class="logo-mark" width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <!-- Outer circle -->
                 <circle cx="30" cy="30" r="20" stroke="#e8662b" stroke-width="1.5" fill="none"/>
@@ -1252,6 +1274,7 @@
                 <!-- Arc -->
                 <path d="M 42 18 Q 48 30 42 42" stroke="#e8662b" stroke-width="1" fill="none" opacity="0.5"/>
             </svg>
+            </span>
             <span class="logo-name">Orange Autarchia</span>
         </div>
         <ul class="nav-links">
@@ -2151,6 +2174,95 @@
                 setInterval(() => {
                     counters.forEach(c => { c.val += c.inc(); c.el.textContent = c.fmt(c.val); });
                 }, 1500);
+            }
+        })();
+    </script>
+
+    <!-- ===== 3D logo mark — the neural badge as a real, lit 3D object (vanilla Three.js) ===== -->
+    <script type="module">
+        import * as THREE from 'three';
+
+        (function initLogo3D() {
+            const canvas = document.getElementById('logo-canvas');
+            if (!canvas) return;
+            const wrap = canvas.closest('.logo-mark-wrap');
+            const logo = canvas.closest('.logo');
+            const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            const ORANGE = 0xe8662b;
+
+            try {
+                const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+                camera.position.set(0, 0, 4.2);
+
+                const group = new THREE.Group();
+                scene.add(group);
+
+                // shaded metals so the badge reads as a solid object, not a flat disc
+                const shell = new THREE.MeshStandardMaterial({ color: ORANGE, roughness: 0.3, metalness: 0.55, emissive: 0x551d0a, emissiveIntensity: 0.45 });
+                const nodeMat = new THREE.MeshStandardMaterial({ color: 0xff8a4d, roughness: 0.25, metalness: 0.35, emissive: ORANGE, emissiveIntensity: 0.7 });
+
+                // outer ring
+                group.add(new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.075, 18, 64), shell));
+                // central hub
+                group.add(new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 24), nodeMat));
+
+                // five nodes in a pentagon, each wired to the hub with a thin rod
+                const R = 0.62;
+                for (let i = 0; i < 5; i++) {
+                    const a = (-90 + i * 72) * Math.PI / 180;
+                    const x = Math.cos(a) * R, y = Math.sin(a) * R;
+                    const node = new THREE.Mesh(new THREE.SphereGeometry(0.14, 18, 18), nodeMat);
+                    node.position.set(x, y, 0);
+                    group.add(node);
+
+                    const len = Math.hypot(x, y);
+                    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, len, 8), shell);
+                    rod.position.set(x / 2, y / 2, 0);
+                    rod.rotation.z = Math.atan2(y, x) - Math.PI / 2; // align +Y rod to point at the node
+                    group.add(rod);
+                }
+
+                // lighting => real highlights and shadowed depth as it turns
+                scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+                const key = new THREE.DirectionalLight(0xfff0e6, 2.4); key.position.set(2, 3, 4); scene.add(key);
+                const rim = new THREE.DirectionalLight(0xe8662b, 1.3);  rim.position.set(-3, -1, -2); scene.add(rim);
+
+                function resize() {
+                    const s = wrap.clientWidth || 50;
+                    renderer.setSize(s, s, false);
+                    camera.updateProjectionMatrix();
+                }
+                resize();
+                window.addEventListener('resize', resize);
+
+                wrap.classList.add('is-3d'); // reveal canvas, hide the flat SVG fallback
+
+                let hover = false;
+                if (logo) {
+                    logo.addEventListener('mouseenter', () => hover = true);
+                    logo.addEventListener('mouseleave', () => hover = false);
+                }
+
+                const baseSpeed = reduceMotion ? 0.005 : 0.013;
+                let t = 0, spin = 0;
+                function loop() {
+                    requestAnimationFrame(loop);
+                    t += 0.016;
+                    spin += hover ? baseSpeed * 4 : baseSpeed;
+                    group.rotation.y = spin;
+                    group.rotation.x = Math.sin(t * 0.6) * 0.28;   // gentle wobble => alive + shows depth
+                    nodeMat.emissiveIntensity = 0.7 + Math.sin(t * 3) * 0.3; // nodes pulse
+                    renderer.render(scene, camera);
+                }
+                loop();
+            } catch (err) {
+                // WebGL unavailable — keep the flat SVG mark (wrap never gets .is-3d)
+                console.warn('Logo 3D disabled, using flat mark:', err);
             }
         })();
     </script>
