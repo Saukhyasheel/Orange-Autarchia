@@ -1181,8 +1181,7 @@
             }
 
             .service-icon {
-                animation: none;
-                transform: rotateY(-10deg) rotateX(4deg);
+                animation-duration: 16s; /* gentle, not frozen */
             }
 
             .service-card:hover .service-icon circle { animation: none; }
@@ -1193,8 +1192,6 @@
             .about-image svg circle { animation: none; }
 
             .hero::after { animation: none; }
-
-            .hud-dot { animation: none; }
 
             #hero-canvas { transition: none; }
         }
@@ -2019,20 +2016,24 @@
                 const posAttr = tokenGeo.attributes.position;
                 const colAttr = tokenGeo.attributes.color;
 
+                // Under prefers-reduced-motion we DON'T freeze (a frozen frame looks broken).
+                // Instead everything keeps drifting, just gently, and we drop the mouse-parallax.
+                const FLOW = reduceMotion ? 0.4 : 1;
+
                 function stepTokens() {
                     for (let i = 0; i < COUNT; i++) {
                         const ix = i * 3;
                         if (phase[i] === 0) {
                             const dx = CORE.x - positions[ix], dy = CORE.y - positions[ix+1], dz = CORE.z - positions[ix+2];
                             const d = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1;
-                            positions[ix]   += (dx / d) * speed[i];
-                            positions[ix+1] += (dy / d) * speed[i];
-                            positions[ix+2] += (dz / d) * speed[i];
+                            positions[ix]   += (dx / d) * speed[i] * FLOW;
+                            positions[ix+1] += (dy / d) * speed[i] * FLOW;
+                            positions[ix+2] += (dz / d) * speed[i] * FLOW;
                             if (d < 1.6) spawnOut(i);
                         } else {
-                            positions[ix]   += speed[i] * 1.5;
-                            positions[ix+1] += drift[ix+1];
-                            positions[ix+2] += drift[ix+2];
+                            positions[ix]   += speed[i] * 1.5 * FLOW;
+                            positions[ix+1] += drift[ix+1] * FLOW;
+                            positions[ix+2] += drift[ix+2] * FLOW;
                             if (positions[ix] > EXIT_X) spawnIn(i);
                         }
                     }
@@ -2042,40 +2043,34 @@
 
                 function renderFrame() { renderer.render(scene, camera); }
 
-                if (reduceMotion) {
-                    // intentional static composed frame — deliberately still, never frozen mid-anim
-                    coreGroup.rotation.set(0.3, 0.5, 0);
-                    group.rotation.set(-0.05, 0.12, 0);
-                    renderFrame();
-                    canvas.classList.add('ready');
-                } else {
-                    let running = true, t = 0;
-                    if ('IntersectionObserver' in window) {
-                        const io = new IntersectionObserver((e) => {
-                            running = e[0].isIntersecting;
-                            if (running) loop();
-                        }, { threshold: 0 });
-                        io.observe(document.querySelector('.hero'));
-                    }
-                    function loop() {
-                        if (!running) return;
-                        requestAnimationFrame(loop);
-                        t += 0.016;
-                        stepTokens();
-                        coreGroup.rotation.y += 0.004;
-                        coreGroup.rotation.x = Math.sin(t * 0.5) * 0.15;
-                        coreSolid.scale.setScalar(1 + Math.sin(t * 2.0) * 0.05);
-                        halo.material.opacity = 0.6 + Math.sin(t * 2.0) * 0.12;
+                let running = true, t = 0;
+                if ('IntersectionObserver' in window) {
+                    const io = new IntersectionObserver((e) => {
+                        running = e[0].isIntersecting;
+                        if (running) loop();
+                    }, { threshold: 0 });
+                    io.observe(document.querySelector('.hero'));
+                }
+                function loop() {
+                    if (!running) return;
+                    requestAnimationFrame(loop);
+                    t += 0.016 * FLOW;
+                    stepTokens();
+                    coreGroup.rotation.y += 0.004 * FLOW;
+                    coreGroup.rotation.x = Math.sin(t * 0.5) * 0.15;
+                    coreSolid.scale.setScalar(1 + Math.sin(t * 2.0) * 0.05);
+                    halo.material.opacity = 0.6 + Math.sin(t * 2.0) * 0.12;
+                    if (!reduceMotion) {
                         cur.x += (target.x - cur.x) * 0.04;
                         cur.y += (target.y - cur.y) * 0.04;
                         group.rotation.y = cur.x * 0.18;
                         group.rotation.x = -cur.y * 0.12;
-                        renderFrame();
                     }
                     renderFrame();
-                    canvas.classList.add('ready');
-                    loop();
                 }
+                renderFrame();
+                canvas.classList.add('ready');
+                loop();
             } catch (err) {
                 // WebGL unavailable / context lost — page still works, just without the scene
                 console.warn('Hero 3D scene disabled:', err);
@@ -2102,23 +2097,20 @@
                 'Enriching 320 leads… complete'
             ];
             if (ticker) {
-                if (reduceMotion) {
-                    ticker.textContent = events[0];
-                } else {
-                    let ei = 0;
-                    const caret = '<span class="tick-caret">▍</span>';
-                    function typeEvent(text, done) {
-                        let i = 0;
-                        (function type() {
-                            ticker.innerHTML = text.slice(0, i) + caret;
-                            if (i++ <= text.length) setTimeout(type, 26);
-                            else setTimeout(done, 1900);
-                        })();
-                    }
-                    (function cycle() {
-                        typeEvent(events[ei], () => { ei = (ei + 1) % events.length; cycle(); });
+                let ei = 0;
+                const caret = '<span class="tick-caret">▍</span>';
+                const typeSpeed = reduceMotion ? 45 : 26;
+                function typeEvent(text, done) {
+                    let i = 0;
+                    (function type() {
+                        ticker.innerHTML = text.slice(0, i) + caret;
+                        if (i++ <= text.length) setTimeout(type, typeSpeed);
+                        else setTimeout(done, 1900);
                     })();
                 }
+                (function cycle() {
+                    typeEvent(events[ei], () => { ei = (ei + 1) % events.length; cycle(); });
+                })();
             }
 
             /* ---- live counters: count-up intro, then keep ticking so they feel live ---- */
@@ -2130,7 +2122,6 @@
 
             counters.forEach(c => {
                 c.val = c.base;
-                if (reduceMotion) { c.el.textContent = c.fmt(c.base); return; }
                 const start = performance.now(), from = Math.floor(c.base * 0.82), dur = 1600;
                 (function intro(now) {
                     const p = Math.min((now - start) / dur, 1);
@@ -2140,7 +2131,7 @@
                 })(start);
             });
 
-            if (!reduceMotion && counters.length) {
+            if (counters.length) {
                 setInterval(() => {
                     counters.forEach(c => { c.val += c.inc(); c.el.textContent = c.fmt(c.val); });
                 }, 1500);
