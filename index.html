@@ -576,14 +576,29 @@
 
         .about-image {
             aspect-ratio: 3/4;
-            background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
-            border-radius: 2px;
+            background:
+                radial-gradient(120% 90% at 50% 0%, rgba(232, 102, 43, 0.22), transparent 62%),
+                linear-gradient(160deg, #15151f 0%, #0a0a0f 100%);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
             position: relative;
             overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
         }
+
+        #about-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: none; /* shown once the 3D network initialises */
+            z-index: 2;
+        }
+
+        .about-image.is-3d #about-canvas { display: block; }
+        .about-image.is-3d > svg { display: none; }
 
         .about-image svg {
             width: 90%;
@@ -1473,8 +1488,9 @@
     <section class="about" id="about">
         <div class="about-content">
             <div class="about-image">
+                <canvas id="about-canvas" aria-hidden="true"></canvas>
                 <svg viewBox="0 0 300 400" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <!-- Neural Network / AI Illustration -->
+                    <!-- Neural Network / AI Illustration (flat fallback if WebGL is unavailable) -->
                     <!-- Background geometric shapes -->
                     <circle cx="150" cy="100" r="60" stroke="rgba(255,255,255,0.15)" stroke-width="1" fill="none"/>
                     <circle cx="150" cy="100" r="80" stroke="rgba(255,255,255,0.1)" stroke-width="1" fill="none"/>
@@ -2287,6 +2303,142 @@
             } catch (err) {
                 // WebGL unavailable — keep the flat SVG mark (wrap never gets .is-3d)
                 console.warn('Logo 3D disabled, using flat mark:', err);
+            }
+        })();
+    </script>
+
+    <!-- ===== About panel — a live 3D neural network with signals travelling the wires ===== -->
+    <script type="module">
+        import * as THREE from 'three';
+
+        (function initAboutNet() {
+            const canvas = document.getElementById('about-canvas');
+            if (!canvas) return;
+            const panel = canvas.closest('.about-image');
+            const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            const isMobile = window.matchMedia('(max-width: 768px)').matches;
+            const ORANGE = 0xe8662b;
+
+            try {
+                const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+                camera.position.set(0, 0, 4.2);
+                const group = new THREE.Group();
+                scene.add(group);
+
+                function glowTex() {
+                    const c = document.createElement('canvas'); c.width = c.height = 64;
+                    const x = c.getContext('2d');
+                    const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+                    g.addColorStop(0, 'rgba(255,231,210,1)');
+                    g.addColorStop(0.4, 'rgba(232,102,43,0.85)');
+                    g.addColorStop(1, 'rgba(232,102,43,0)');
+                    x.fillStyle = g; x.beginPath(); x.arc(32, 32, 32, 0, Math.PI * 2); x.fill();
+                    const t = new THREE.CanvasTexture(c); t.needsUpdate = true; return t;
+                }
+                const tex = glowTex();
+
+                // node cloud (fibonacci sphere * random radius => organic, never a flat ring)
+                const N = isMobile ? 20 : 32;
+                const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+                const pts = [];
+                for (let i = 0; i < N; i++) {
+                    const y = 1 - (i / (N - 1)) * 2;
+                    const r = Math.sqrt(Math.max(0, 1 - y * y));
+                    const th = i * GOLDEN;
+                    pts.push(new THREE.Vector3(Math.cos(th) * r, y, Math.sin(th) * r).multiplyScalar(0.55 + Math.random() * 0.6));
+                }
+
+                const nodePos = new Float32Array(N * 3);
+                pts.forEach((p, i) => { nodePos[i*3] = p.x; nodePos[i*3+1] = p.y; nodePos[i*3+2] = p.z; });
+                const nodeGeo = new THREE.BufferGeometry();
+                nodeGeo.setAttribute('position', new THREE.BufferAttribute(nodePos, 3));
+                const nodes = new THREE.Points(nodeGeo, new THREE.PointsMaterial({
+                    map: tex, color: 0xffffff, size: 0.17, sizeAttenuation: true,
+                    transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false
+                }));
+                group.add(nodes);
+
+                // connect near neighbours
+                const edges = [], linePts = [];
+                const THR = 0.92;
+                for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+                    if (pts[i].distanceTo(pts[j]) < THR) {
+                        edges.push([i, j]);
+                        linePts.push(pts[i].x, pts[i].y, pts[i].z, pts[j].x, pts[j].y, pts[j].z);
+                    }
+                }
+                const lines = new THREE.LineSegments(
+                    new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(linePts, 3)),
+                    new THREE.LineBasicMaterial({ color: ORANGE, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false })
+                );
+                group.add(lines);
+
+                // signal pulses travelling along the wires => the network "thinking"
+                const P = edges.length ? (isMobile ? 5 : 10) : 0;
+                const pulsePos = new Float32Array(Math.max(P, 1) * 3);
+                const pulseGeo = new THREE.BufferGeometry();
+                pulseGeo.setAttribute('position', new THREE.BufferAttribute(pulsePos, 3));
+                const pulses = new THREE.Points(pulseGeo, new THREE.PointsMaterial({
+                    map: tex, color: 0xffd2a8, size: 0.24, sizeAttenuation: true,
+                    transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false
+                }));
+                pulses.visible = P > 0;
+                group.add(pulses);
+                const sig = [];
+                for (let k = 0; k < P; k++) sig.push({ e: edges[(Math.random() * edges.length) | 0], t: Math.random(), sp: 0.004 + Math.random() * 0.012 });
+
+                function resize() {
+                    const w = panel.clientWidth || 360, h = panel.clientHeight || 480;
+                    renderer.setSize(w, h, false);
+                    camera.aspect = w / h; camera.updateProjectionMatrix();
+                }
+                resize();
+                window.addEventListener('resize', resize);
+                panel.classList.add('is-3d');
+
+                const target = { x: 0, y: 0 }, cur = { x: 0, y: 0 };
+                if (!reduceMotion) window.addEventListener('pointermove', (e) => {
+                    target.x = (e.clientX / window.innerWidth) * 2 - 1;
+                    target.y = (e.clientY / window.innerHeight) * 2 - 1;
+                }, { passive: true });
+
+                const SPIN = reduceMotion ? 0.0009 : 0.0024;
+                let running = true, t = 0, spin = 0;
+                if ('IntersectionObserver' in window) {
+                    const io = new IntersectionObserver((es) => { running = es[0].isIntersecting; if (running) loop(); }, { threshold: 0 });
+                    io.observe(panel);
+                }
+                function loop() {
+                    if (!running) return;
+                    requestAnimationFrame(loop);
+                    t += 0.016;
+                    spin += SPIN;
+                    cur.x += (target.x - cur.x) * 0.04;
+                    cur.y += (target.y - cur.y) * 0.04;
+                    group.rotation.y = spin + cur.x * 0.4;
+                    group.rotation.x = -cur.y * 0.25 + Math.sin(t * 0.4) * 0.05;
+
+                    for (let k = 0; k < P; k++) {
+                        const s = sig[k];
+                        s.t += s.sp;
+                        if (s.t >= 1) { s.e = edges[(Math.random() * edges.length) | 0]; s.t = 0; s.sp = 0.004 + Math.random() * 0.012; }
+                        const a = pts[s.e[0]], b = pts[s.e[1]];
+                        pulsePos[k*3]   = a.x + (b.x - a.x) * s.t;
+                        pulsePos[k*3+1] = a.y + (b.y - a.y) * s.t;
+                        pulsePos[k*3+2] = a.z + (b.z - a.z) * s.t;
+                    }
+                    if (P > 0) pulseGeo.attributes.position.needsUpdate = true;
+
+                    renderer.render(scene, camera);
+                }
+                loop();
+            } catch (err) {
+                // WebGL unavailable — keep the flat SVG illustration (panel never gets .is-3d)
+                console.warn('About 3D network disabled, using flat illustration:', err);
             }
         })();
     </script>
