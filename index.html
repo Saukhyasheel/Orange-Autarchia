@@ -82,6 +82,8 @@
             letter-spacing: -0.02em;
             display: flex;
             align-items: center;
+            gap: 0.6rem;
+            perspective: 600px; /* gives the mark real 3D depth as it spins */
         }
 
         .logo svg {
@@ -92,6 +94,29 @@
 
         .logo svg:hover {
             opacity: 0.8;
+        }
+
+        .logo-name {
+            font-family: var(--font-display);
+            font-size: 1.3rem;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+            color: var(--color-text);
+        }
+
+        /* continuously rotate the logo mark in 3D */
+        .logo-mark {
+            transform-style: preserve-3d;
+            transform-origin: center;
+            animation: logo-spin 10s linear infinite;
+        }
+
+        @keyframes logo-spin {
+            to { transform: rotateY(360deg); }
+        }
+
+        .logo:hover .logo-mark {
+            animation-duration: 2.8s; /* whirls up on hover */
         }
 
         .nav-links {
@@ -1181,7 +1206,7 @@
             }
 
             .service-icon {
-                animation-duration: 16s; /* gentle, not frozen */
+                animation-duration: 8s; /* still moves clearly, just a touch calmer */
             }
 
             .service-card:hover .service-icon circle { animation: none; }
@@ -1207,36 +1232,27 @@
 <body>
     <nav>
         <div class="logo">
-            <svg width="300" height="60" viewBox="0 0 300 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <!-- Icon -->
-                <g>
-                    <!-- Outer circle -->
-                    <circle cx="30" cy="30" r="20" stroke="#e8662b" stroke-width="1.5" fill="none"/>
-                    
-                    <!-- Nodes -->
-                    <circle cx="30" cy="18" r="3" fill="#e8662b"/>
-                    <circle cx="20.5" cy="30" r="3" fill="#e8662b"/>
-                    <circle cx="39.5" cy="30" r="3" fill="#e8662b"/>
-                    <circle cx="24.25" cy="39.75" r="3" fill="#e8662b"/>
-                    <circle cx="35.75" cy="39.75" r="3" fill="#e8662b"/>
-                    
-                    <!-- Central hub -->
-                    <circle cx="30" cy="30" r="4" fill="#e8662b"/>
-                    
-                    <!-- Connecting lines -->
-                    <line x1="30" y1="21" x2="30" y2="26" stroke="#e8662b" stroke-width="1"/>
-                    <line x1="23.5" y1="30" x2="26" y2="30" stroke="#e8662b" stroke-width="1"/>
-                    <line x1="34" y1="30" x2="36.5" y2="30" stroke="#e8662b" stroke-width="1"/>
-                    <line x1="27" y1="33" x2="25.5" y2="36.75" stroke="#e8662b" stroke-width="1"/>
-                    <line x1="33" y1="33" x2="34.5" y2="36.75" stroke="#e8662b" stroke-width="1"/>
-                    
-                    <!-- Arc -->
-                    <path d="M 42 18 Q 48 30 42 42" stroke="#e8662b" stroke-width="1" fill="none" opacity="0.5"/>
-                </g>
-                
-                <!-- Company Name -->
-                <text x="65" y="37" font-family="Cormorant Garamond, serif" font-size="18" font-weight="400" fill="#f4f1ea" letter-spacing="-0.3">Orange Autarchia</text>
+            <svg class="logo-mark" width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Outer circle -->
+                <circle cx="30" cy="30" r="20" stroke="#e8662b" stroke-width="1.5" fill="none"/>
+                <!-- Nodes -->
+                <circle cx="30" cy="18" r="3" fill="#e8662b"/>
+                <circle cx="20.5" cy="30" r="3" fill="#e8662b"/>
+                <circle cx="39.5" cy="30" r="3" fill="#e8662b"/>
+                <circle cx="24.25" cy="39.75" r="3" fill="#e8662b"/>
+                <circle cx="35.75" cy="39.75" r="3" fill="#e8662b"/>
+                <!-- Central hub -->
+                <circle cx="30" cy="30" r="4" fill="#e8662b"/>
+                <!-- Connecting lines -->
+                <line x1="30" y1="21" x2="30" y2="26" stroke="#e8662b" stroke-width="1"/>
+                <line x1="23.5" y1="30" x2="26" y2="30" stroke="#e8662b" stroke-width="1"/>
+                <line x1="34" y1="30" x2="36.5" y2="30" stroke="#e8662b" stroke-width="1"/>
+                <line x1="27" y1="33" x2="25.5" y2="36.75" stroke="#e8662b" stroke-width="1"/>
+                <line x1="33" y1="33" x2="34.5" y2="36.75" stroke="#e8662b" stroke-width="1"/>
+                <!-- Arc -->
+                <path d="M 42 18 Q 48 30 42 42" stroke="#e8662b" stroke-width="1" fill="none" opacity="0.5"/>
             </svg>
+            <span class="logo-name">Orange Autarchia</span>
         </div>
         <ul class="nav-links">
             <li><a href="#services">Services</a></li>
